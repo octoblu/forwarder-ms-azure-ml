@@ -30,6 +30,10 @@ class Server
     app.options '*', cors()
 
     router = new Router {@meshbluConfig, @service, @serviceUrl, @octobluOauthUrl}
+    console.log 'meshbluConf', @meshbluConfig
+    console.log 'service', @service
+    console.log 'serviceUrl', @serviceUrl
+    console.log 'octobluOauthUrl', @octobluOauthUrl
 
     router.route app
 

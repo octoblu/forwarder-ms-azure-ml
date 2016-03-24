@@ -1,10 +1,10 @@
-_             = require 'lodash'
-dashdash      = require 'dashdash'
-MeshbluConfig = require 'meshblu-config'
-MailerService = require '.'
-Server        = require './src/server'
+_                  = require 'lodash'
+dashdash           = require 'dashdash'
+MeshbluConfig      = require 'meshblu-config'
+SplunkService = require '.'
+Server             = require './src/server'
 
-service = new MailerService(
+service = new SplunkService(
   meshbluConfig: new MeshbluConfig().toJSON()
   serviceUrl: process.env.SERVICE_URL
 )
@@ -14,7 +14,7 @@ service.run (error)=>
   server = new Server {port: process.env.PORT || 80, service}
   server.run (error) =>
     return @panic error if error?
-    {address,port} = server.address()    
+    {address,port} = server.address()
 
 
 process.on 'SIGTERM', =>

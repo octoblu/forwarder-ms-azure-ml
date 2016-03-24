@@ -7,6 +7,10 @@ OctobluStrategy       = require 'passport-octoblu'
 
 class Router
   constructor: ({service, @serviceUrl, @octobluOauthUrl, @meshbluConfig}, dependencies={}) ->
+    console.log 'meshbluConf', @meshbluConfig
+    console.log 'service', @service
+    console.log 'serviceUrl', @serviceUrl
+    console.log 'octobluOauthUrl', @octobluOauthUrl
     throw new Error "a service is required in order to make a channeldevice" unless service?
     throw new Error "an octobluOauthUrl is required in order to make a channeldevice" unless @octobluOauthUrl?
     throw new Error "a meshbluConfig is required in order to make a channeldevice" unless @meshbluConfig?

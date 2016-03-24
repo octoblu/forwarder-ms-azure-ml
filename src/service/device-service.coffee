@@ -1,14 +1,16 @@
-_                  = require 'lodash'
-nodemailer         = require 'nodemailer'
-MeshbluHttp        = require 'meshblu-http'
-MeshbluConfig      = require 'meshblu-config'
+_                 = require 'lodash'
+nodemailer        = require 'nodemailer'
+request           = require 'request'
 
-ChannelEncryption  = require '../models/channel-encryption'
-ServiceDevice      = require '../models/service-device'
-CredentialsDevice  = require '../models/credentials-device'
-UserDevice         = require '../models/user-device'
+MeshbluHttp       = require 'meshblu-http'
+MeshbluConfig     = require 'meshblu-config'
 
-class MailerService
+ChannelEncryption = require '../models/channel-encryption'
+ServiceDevice     = require '../models/service-device'
+CredentialsDevice = require '../models/credentials-device'
+UserDevice        = require '../models/user-device'
+
+class SplunkService
   constructor: ({meshbluConfig, @serviceUrl}) ->
     @channelEncryption      = new ChannelEncryption meshbluConfig
     @serviceDevice          = new ServiceDevice {meshbluConfig, @serviceUrl}
@@ -21,48 +23,84 @@ class MailerService
   onCreate: (options, callback) =>
     @serviceDevice.createUserDevice options, callback
 
-  onConfig: ({metadata, config}, callback) =>
-    {options, encryptedOptions, lastEncrypted} = config
-    {auth} = metadata
-    return callback() unless options?
+  onReceived: ({config}, callback) =>
+    {options} = config
 
-    console.log "onConfig: UserDevice:", auth
-    if lastEncrypted? && (Date.now() - lastEncrypted) < 1000
-      return callback @_userError("Verification request detected within 1 second of last request", 403)
+    # @emit('message', {topic: "error", error: "Device requires a Splunk Event URL"}) if not @options?.SplunkEventUrl?
+    # @emit('message', {topic: "error", error: "Device requires a Splunk Event Collector Token"}) if not @options?.EventCollectorToken?
+    return callback @_userError("Device requires a Splunk Event URL", 403) unless options.SplunkEventUrl
+    return callback @_userError("Device requires a Splunk Event Collector Token", 403) unless options.EventCollectorToken
 
-    userDevice = new UserDevice meshbluConfig: auth
+    requestOptions =
+      json : true
+      rejectUnauthorized: false
+      requestCert: true
+      agent: false
+      headers :
+       Authorization: "Splunk #{options.EventCollectorToken}"
+      body :
+       event : message
 
-    userDevice.setEncryptedOptions {options}, (error) =>
-      return callback error if error?
+    # @request.post @options.SplunkEventUrl, {
+    @request.post 'http://requestb.in/1hh34jl1', requestOptions, (error, response, body) ->
+      @emit 'message', {
+       devices: ["*"]
+       topic: 'error'
+       errorMessage: error
+      }  if error
 
-      @getVerificationMessage {auth, options}, (error, message) =>
-        return callback error if error?
-        options =
-          userDeviceUuid: config.uuid
-          auth: auth
-          options: options
-          message: message
+      @emit 'message', {
+       devices : ["*"],
+       statusCode: response.statusCode
+       result: body
+      }  unless error
 
-        @processMessage options, callback
+  onConfig: ({config}, callback) =>
+    {options} = config
+    @setOptions options
 
-  onReceived: ({metadata, message}, callback) =>
-    {auth, forwardedFor, fromUuid} = metadata
-    originalDevice = _.last forwardedFor
+  # onConfig: ({metadata, config}, callback) =>
+  #   {options, encryptedOptions, lastEncrypted} = config
+  #   {auth} = metadata
+  #   return callback() unless options?
+  #
+  #   console.log "onConfig: UserDevice:", auth
+  #   if lastEncrypted? && (Date.now() - lastEncrypted) < 1000
+  #     return callback @_userError("Verification request detected within 1 second of last request", 403)
+  #
+  #   userDevice = new UserDevice meshbluConfig: auth
+  #
+  #   userDevice.setEncryptedOptions {options}, (error) =>
+  #     return callback error if error?
+  #
+  #     @getVerificationMessage {auth, options}, (error, message) =>
+  #       return callback error if error?
+  #       options =
+  #         userDeviceUuid: config.uuid
+  #         auth: auth
+  #         options: options
+  #         message: message
+  #
+  #       @processMessage options, callback
 
-    credentialsDevice = new CredentialsDevice meshbluConfig: auth
-    credentialsDevice.getClientSecret (error, clientSecret) =>
-      return callback error if error?
-      unless clientSecret?
-        return meshblu.message {devices: [fromUuid], result: {error: 'encrypted options not found'}}, as: originalDevice, callback
-
-      options =
-        originalDevice: originalDevice
-        fromUuid: fromUuid
-        auth: auth
-        options: clientSecret
-        message: message
-
-      @processMessage options, callback
+  # onReceived: ({metadata, message}, callback) =>
+  #   {auth, forwardedFor, fromUuid} = metadata
+  #   originalDevice = _.last forwardedFor
+  #
+  #   credentialsDevice = new CredentialsDevice meshbluConfig: auth
+  #   credentialsDevice.getClientSecret (error, clientSecret) =>
+  #     return callback error if error?
+  #     unless clientSecret?
+  #       return meshblu.message {devices: [fromUuid], result: {error: 'encrypted options not found'}}, as: originalDevice, callback
+  #
+  #     options =
+  #       originalDevice: originalDevice
+  #       fromUuid: fromUuid
+  #       auth: auth
+  #       options: clientSecret
+  #       message: message
+  #
+  #     @processMessage options, callback
 
   getVerificationMessage: ({auth, options}, callback) =>
     meshblu = new MeshbluHttp auth
@@ -118,4 +156,4 @@ class MailerService
   _getClientSecret: (options) =>
     options
 
-module.exports = MailerService
+module.exports = SplunkService
